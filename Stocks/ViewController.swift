@@ -11,6 +11,7 @@ import UIKit
 class ViewController: UIViewController, UIPickerViewDataSource, UIPickerViewDelegate {
 
     
+    @IBOutlet weak var companyLogo: UIImageView!
     @IBOutlet weak var companyNameLabel: UILabel!
     @IBOutlet weak var companySymbolLabel: UILabel!
     @IBOutlet weak var priceLabel: UILabel!
@@ -55,11 +56,26 @@ class ViewController: UIViewController, UIPickerViewDataSource, UIPickerViewDele
                 print("! Network error")
                 return
             }
-            print(String(data: data, encoding: .utf8)!)
             self.parseQuote(data:data)
         }
         dataTask.resume()
         
+    }
+    
+    private func downloadLogo(for symbol:String){
+        let url = URL(string: "https://api.iextrading.com/1.0/stock/\(symbol)/logo")!
+        let dataTask = URLSession.shared.dataTask(with: url) { data, response, error in
+            guard
+                error == nil,
+                (response as? HTTPURLResponse)?.statusCode == 200,
+                let data = data
+            else {
+                print("! Network error")
+                return
+            }
+            self.parseRef(data:data)
+        }
+        dataTask.resume()
     }
     
     private func requestQuoteUpdate(){
@@ -78,7 +94,6 @@ class ViewController: UIViewController, UIPickerViewDataSource, UIPickerViewDele
     private func parseQuote(data:Data){
         do{
             let jsonObject = try JSONSerialization.jsonObject(with: data)
-
             guard
                 let json = jsonObject as? [String : Any],
                 let companyName = json["companyName"] as? String,
@@ -99,12 +114,59 @@ class ViewController: UIViewController, UIPickerViewDataSource, UIPickerViewDele
         }
     }
     
+    private func parseRef(data:Data){
+        do{
+            let jsonObject = try JSONSerialization.jsonObject(with: data)
+            guard
+                let json = jsonObject as? [String : Any],
+                let ref = json["url"] as? String
+            else {
+                    print("! Invalid JSON format")
+                    return
+            }
+            let url = URL(string: ref)!
+            self.downloadCompanyLogo(url : url)
+            }
+        catch {
+            print("! JSON parsing error: " + error.localizedDescription)
+        }
+    }
+    
+    private func downloadCompanyLogo(url : URL){
+        let dataTask = URLSession.shared.dataTask(with: url) { data, response, error in
+            guard
+                error == nil,
+                (response as? HTTPURLResponse)?.statusCode == 200,
+                let data = data
+                else {
+                    print("! Network error")
+                    return
+            }
+            let image = UIImage(data : data)!
+            DispatchQueue.main.async {
+                self.displayLogo(companyLogo: image)
+            }
+        }
+        dataTask.resume()
+    }
+    
+    private func displayLogo(companyLogo: UIImage){
+        self.companyLogo.image = companyLogo
+    }
+    
     private func displayStockInfo(companyName: String, symbol: String, price: Double, priceChange:Double){
         self.activityIndicator.stopAnimating()
         self.companyNameLabel.text = companyName
         self.companySymbolLabel.text = symbol
         self.priceLabel.text = "\(price)"
-        self.priceChangeLabel.text = "\(priceChange)"
+        if(priceChange>0){
+            self.priceChangeLabel.textColor = UIColor.green
+            self.priceChangeLabel.text = "\(priceChange)"
+        }
+        else if(priceChange<0){
+            self.priceChangeLabel.textColor = UIColor.red
+            self.priceChangeLabel.text = "\(priceChange)"
+        }
     }
     
     private let companies: [String:String] = [
